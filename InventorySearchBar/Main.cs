@@ -177,7 +177,7 @@ namespace InventorySearchBar
     }
 
     [HarmonyPatch(typeof(ItemsFilter), nameof(ItemsFilter.ShouldShowItem), new Type[] { typeof(BlueprintItem), typeof(ItemsFilter.FilterType) })]
-    public static class Test
+    public static class ItemsFilter_ShouldShowItem
     {
         [HarmonyPostfix]
         public static void Postfix(BlueprintItem blueprintItem, ref bool __result)
