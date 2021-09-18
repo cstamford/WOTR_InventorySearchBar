@@ -4,7 +4,7 @@ using Kingmaker.Blueprints.Items;
 using Kingmaker.PubSubSystem;
 using Kingmaker.UI.Common;
 using Kingmaker.UI.MVVM._PCView.CharGen.Phases.FeatureSelector;
-using Kingmaker.UI.MVVM._PCView.Slots;
+using Kingmaker.UI.MVVM._PCView.ServiceWindows.Inventory;
 using Owlcat.Runtime.UI.Controls.Button;
 using System;
 using System.Collections.Generic;
@@ -14,6 +14,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityModManagerNet;
+using UniRx;
 
 namespace InventorySearchBar
 {
@@ -24,10 +25,7 @@ namespace InventorySearchBar
         private OwlcatButton m_dropdown_button;
         private TMP_Dropdown m_dropdown;
         private TextMeshProUGUI m_placeholder;
-        private ItemsFilterPCView m_filter_view;
-
-        private bool m_was_disabled = true;
-        private ItemsFilter.SorterType m_last_sorter;
+        private InventoryStashPCView m_inventory_stash_view;
 
         private void Awake()
         {
@@ -36,7 +34,6 @@ namespace InventorySearchBar
             m_dropdown_button = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown/GenerateButtonPlace").GetComponent<OwlcatButton>();
             m_dropdown = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown").GetComponent<TMP_Dropdown>();
             m_placeholder = transform.Find("FieldPlace/SearchField/SearchBackImage/Placeholder/Label").GetComponent<TextMeshProUGUI>();
-            m_filter_view = transform.parent.GetComponent<ItemsFilterPCView>();
 
             m_input_field.transform.Find("Text Area/Placeholder").GetComponent<TextMeshProUGUI>().SetText("Enter item name...");
 
@@ -56,24 +53,23 @@ namespace InventorySearchBar
         private void ApplyFilter()
         {
             InventorySearchBar.SearchContents = m_input_field.text;
-            m_filter_view.ViewModel.CurrentFilter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
+            m_inventory_stash_view.ViewModel.ItemsFilter.CurrentFilter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
             InventorySearchBar.SearchContents = null;
         }
 
         private void OnEnable()
         {
-            m_was_disabled = true;
+            m_inventory_stash_view = null;
         }
 
         private void Update()
         {
-            if (m_was_disabled || m_last_sorter != m_filter_view.ViewModel.CurrentSorter.Value)
+            if (m_inventory_stash_view == null)
             {
-                OnSelectDropdown(m_dropdown.value);
+                m_inventory_stash_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
+                m_inventory_stash_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
+                m_inventory_stash_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
             }
-
-            m_was_disabled = false;
-            m_last_sorter = m_filter_view.ViewModel.CurrentSorter.Value;
         }
 
         private void OnShowDropdown()
