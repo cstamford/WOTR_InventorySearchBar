@@ -15,6 +15,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityModManagerNet;
 using UniRx;
+using UnityEngine.UI;
 
 namespace InventorySearchBar
 {
@@ -23,8 +24,10 @@ namespace InventorySearchBar
         private TMP_InputField m_input_field;
         private OwlcatButton m_input_button;
         private OwlcatButton m_dropdown_button;
+        private GameObject m_dropdown_icon;
         private TMP_Dropdown m_dropdown;
         private TextMeshProUGUI m_placeholder;
+        private Image[] m_search_icons;
         private InventoryStashPCView m_inventory_stash_view;
 
         private void Awake()
@@ -32,6 +35,7 @@ namespace InventorySearchBar
             m_input_field = transform.Find("FieldPlace/SearchField/SearchBackImage/InputField").GetComponent<TMP_InputField>();
             m_input_button = transform.Find("FieldPlace/SearchField/SearchBackImage/Placeholder").GetComponent<OwlcatButton>();
             m_dropdown_button = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown/GenerateButtonPlace").GetComponent<OwlcatButton>();
+            m_dropdown_icon = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown/GenerateButtonPlace/GenerateButton/Icon").gameObject;
             m_dropdown = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown").GetComponent<TMP_Dropdown>();
             m_placeholder = transform.Find("FieldPlace/SearchField/SearchBackImage/Placeholder/Label").GetComponent<TextMeshProUGUI>();
 
@@ -48,6 +52,18 @@ namespace InventorySearchBar
             options[(int)ItemsFilter.FilterType.NoFilter] = "All";
             options[(int)ItemsFilter.FilterType.NonUsable] = "Non-usable";
             m_dropdown.AddOptions(options);
+
+            List<Image> images = new List<Image>();
+
+            foreach (Transform child in transform.parent.Find("SwitchBar"))
+            {
+                images.Add(child.Find("Icon")?.GetComponent<Image>());
+            }
+
+            m_search_icons = images.ToArray();
+
+            Destroy(transform.parent.Find("SwitchBar")); // existing filters display
+            Destroy(GetComponent<CharGenFeatureSearchPCView>()); // controller from where we stole the search bar
         }
 
         private void ApplyFilter()
@@ -69,6 +85,7 @@ namespace InventorySearchBar
                 m_inventory_stash_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
                 m_inventory_stash_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
                 m_inventory_stash_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                UpdatePlaceholder();
             }
         }
 
@@ -79,7 +96,6 @@ namespace InventorySearchBar
 
         private void OnSelectDropdown(int idx)
         {
-            m_dropdown.Hide();
             UpdatePlaceholder();
             ApplyFilter();
         }
@@ -109,6 +125,8 @@ namespace InventorySearchBar
 
         private void UpdatePlaceholder()
         {
+            m_dropdown_icon.GetComponent<Image>().sprite = m_search_icons[m_dropdown.value]?.sprite;
+            m_dropdown_icon.gameObject.SetActive(m_dropdown_icon.GetComponent<Image>().sprite != null);
             m_placeholder.text = string.IsNullOrEmpty(m_input_field.text) ? m_dropdown.options[m_dropdown.value].text : m_input_field.text;
         }
     }
@@ -147,8 +165,6 @@ namespace InventorySearchBar
                     search_bar.GetComponent<RectTransform>().localScale = new Vector3(1.0f, 0.95f, 1.0f);
                     search_bar.GetComponent<RectTransform>().localPosition = new Vector3(0.0f, 4.0f, 0.0f);
                     search_bar.AddComponent<SearchBoxController>();
-                    GameObject.Destroy(filters_block.transform.Find("SwitchBar").gameObject); // existing filters display
-                    GameObject.Destroy(search_bar.GetComponent<CharGenFeatureSearchPCView>()); // controller from where we stole the search bar
                 }
             }
         }
