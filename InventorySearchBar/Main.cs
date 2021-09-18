@@ -16,6 +16,8 @@ using UnityEngine.EventSystems;
 using UnityModManagerNet;
 using UniRx;
 using UnityEngine.UI;
+using Kingmaker.UI.MVVM._PCView.Vendor;
+using Kingmaker.UI.MVVM._VM.Vendor;
 
 namespace InventorySearchBar
 {
@@ -28,7 +30,7 @@ namespace InventorySearchBar
         private TMP_Dropdown m_dropdown;
         private TextMeshProUGUI m_placeholder;
         private Image[] m_search_icons;
-        private InventoryStashPCView m_inventory_stash_view;
+        private ReactiveProperty<ItemsFilter.FilterType> m_active_filter;
 
         private void Awake()
         {
@@ -69,22 +71,34 @@ namespace InventorySearchBar
         private void ApplyFilter()
         {
             InventorySearchBar.SearchContents = m_input_field.text;
-            m_inventory_stash_view.ViewModel.ItemsFilter.CurrentFilter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
+            m_active_filter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
             InventorySearchBar.SearchContents = null;
         }
 
         private void OnEnable()
         {
-            m_inventory_stash_view = null;
+            m_active_filter = null;
         }
 
         private void Update()
         {
-            if (m_inventory_stash_view == null)
+            if (m_active_filter == null)
             {
-                m_inventory_stash_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
-                m_inventory_stash_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
-                m_inventory_stash_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                if (transform.parent.parent.parent.name == "VendorBlock")
+                {
+                    VendorPCView vendor_pc_view = GetComponentInParent(typeof(VendorPCView)) as VendorPCView;
+                    m_active_filter = vendor_pc_view.ViewModel.VendorItemsFilter.CurrentFilter;
+                    vendor_pc_view.ViewModel.VendorSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
+                    vendor_pc_view.ViewModel.VendorItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                }
+                else
+                {
+                    InventoryStashPCView stash_pc_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
+                    m_active_filter = stash_pc_view.ViewModel.ItemsFilter.CurrentFilter;
+                    stash_pc_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
+                    stash_pc_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                }
+
                 UpdatePlaceholder();
             }
         }
@@ -119,8 +133,6 @@ namespace InventorySearchBar
             m_input_field.gameObject.SetActive(false);
             m_input_button.gameObject.SetActive(true);
             EventSystem.current.SetSelectedGameObject(null); // return focus to regular UI
-            UpdatePlaceholder();
-            ApplyFilter();
         }
 
         private void UpdatePlaceholder()
@@ -161,9 +173,8 @@ namespace InventorySearchBar
                     GameObject search_bar = GameObject.Instantiate(prefab_transform.gameObject);
                     search_bar.name = "CustomSearchBar";
                     search_bar.transform.SetParent(filters_block.transform, false);
-                    search_bar.transform.SetSiblingIndex(1); // below filters, above sorting
                     search_bar.GetComponent<RectTransform>().localScale = new Vector3(0.85f, 0.85f, 1.0f);
-                    search_bar.GetComponent<RectTransform>().localPosition = new Vector3(0.0f, 4.0f, 0.0f);
+                    search_bar.GetComponent<RectTransform>().localPosition = new Vector3(0.0f, 2.0f, 0.0f);
                     search_bar.AddComponent<SearchBoxController>();
                 }
             }
@@ -200,6 +211,18 @@ namespace InventorySearchBar
                     blueprintItem.Name.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0 || // name match
                     blueprintItem.SubtypeName.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0); // type match
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(VendorVM), nameof(VendorVM.UpdateVendorSide))]
+    public static class VendorVM_UpdateVendorSide
+    {
+        [HarmonyPostfix]
+        public static void Postfix(VendorVM __instance)
+        {
+            // For some reason the vendor slots group changed notification is not dispatched, it is handled immediately, so we dispatch it here.
+            // This allows the vendor UI to properly update with the filter.
+            __instance.VendorSlotsGroup.CollectionChangedCommand.Execute(false);
         }
     }
 }
