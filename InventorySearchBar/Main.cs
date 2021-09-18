@@ -62,7 +62,7 @@ namespace InventorySearchBar
 
             m_search_icons = images.ToArray();
 
-            Destroy(transform.parent.Find("SwitchBar")); // existing filters display
+            Destroy(transform.parent.Find("SwitchBar").gameObject); // existing filters display
             Destroy(GetComponent<CharGenFeatureSearchPCView>()); // controller from where we stole the search bar
         }
 
@@ -162,7 +162,7 @@ namespace InventorySearchBar
                     search_bar.name = "CustomSearchBar";
                     search_bar.transform.SetParent(filters_block.transform, false);
                     search_bar.transform.SetSiblingIndex(1); // below filters, above sorting
-                    search_bar.GetComponent<RectTransform>().localScale = new Vector3(1.0f, 0.95f, 1.0f);
+                    search_bar.GetComponent<RectTransform>().localScale = new Vector3(0.85f, 0.85f, 1.0f);
                     search_bar.GetComponent<RectTransform>().localPosition = new Vector3(0.0f, 4.0f, 0.0f);
                     search_bar.AddComponent<SearchBoxController>();
                 }
