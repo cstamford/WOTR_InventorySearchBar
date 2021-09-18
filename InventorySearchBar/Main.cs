@@ -186,7 +186,7 @@ namespace InventorySearchBar
             {
                 __result = __result && (
                     blueprintItem.Name.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0 || // name match
-                    blueprintItem.SubtypeName.ToString().IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0); // type match
+                    blueprintItem.SubtypeName.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0); // type match
             }
         }
     }
