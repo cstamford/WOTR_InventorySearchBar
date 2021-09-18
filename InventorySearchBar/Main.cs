@@ -8,7 +8,6 @@ using Kingmaker.UI.MVVM._PCView.ServiceWindows.Inventory;
 using Owlcat.Runtime.UI.Controls.Button;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using TMPro;
 using UnityEngine;
@@ -18,6 +17,7 @@ using UniRx;
 using UnityEngine.UI;
 using Kingmaker.UI.MVVM._PCView.Vendor;
 using Kingmaker.UI.MVVM._VM.Vendor;
+using Kingmaker.Blueprints.Root;
 
 namespace InventorySearchBar
 {
@@ -34,45 +34,90 @@ namespace InventorySearchBar
 
         private void Awake()
         {
+            // -- Find all of our fields
+
             m_input_field = transform.Find("FieldPlace/SearchField/SearchBackImage/InputField").GetComponent<TMP_InputField>();
             m_input_button = transform.Find("FieldPlace/SearchField/SearchBackImage/Placeholder").GetComponent<OwlcatButton>();
             m_dropdown_button = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown/GenerateButtonPlace").GetComponent<OwlcatButton>();
             m_dropdown_icon = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown/GenerateButtonPlace/GenerateButton/Icon").gameObject;
             m_dropdown = transform.Find("FieldPlace/SearchField/SearchBackImage/Dropdown").GetComponent<TMP_Dropdown>();
             m_placeholder = transform.Find("FieldPlace/SearchField/SearchBackImage/Placeholder/Label").GetComponent<TextMeshProUGUI>();
-
             m_input_field.transform.Find("Text Area/Placeholder").GetComponent<TextMeshProUGUI>().SetText("Enter item name...");
+
+            // -- Setup handlers
 
             m_input_field.onValueChanged.AddListener(delegate (string _) { OnEdit(); });
             m_input_field.onEndEdit.AddListener(delegate (string _) { OnEndEdit(); });
             m_input_button.OnLeftClick.AddListener(delegate { OnStartEdit(); });
             m_dropdown_button.OnLeftClick.AddListener(delegate { OnShowDropdown(); });
-            m_dropdown.onValueChanged.AddListener(delegate (int idx) { OnSelectDropdown(idx); });
+            m_dropdown.onValueChanged.AddListener(delegate (int _) { OnSelectDropdown(); });
+
+            // -- Dropdown options
 
             m_dropdown.ClearOptions();
-            List<string> options = Enum.GetNames(typeof(ItemsFilter.FilterType)).ToList();
-            options[(int)ItemsFilter.FilterType.NoFilter] = "All";
-            options[(int)ItemsFilter.FilterType.NonUsable] = "Non-usable";
+
+            List<string> options = new List<string>();
+            foreach (ItemsFilter.FilterType filter in Enum.GetValues(typeof(ItemsFilter.FilterType)))
+            {
+                options.Add(LocalizedTexts.Instance.ItemsFilter.GetText(filter));
+            }
+
+            // For whatever reason, the localization DB has the wrong info for some of these options... I suspect someone changed the enum order
+            // around and these particular strings are not used anywhere.
+            options[(int)ItemsFilter.FilterType.Ingredients] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.NonUsable);
+            options[(int)ItemsFilter.FilterType.Usable] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.Ingredients);
+            options[(int)ItemsFilter.FilterType.NonUsable] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.Usable);
+
             m_dropdown.AddOptions(options);
 
+            // -- Dropdown images
+
+            GameObject switch_bar = transform.parent.Find("SwitchBar").gameObject;
             List<Image> images = new List<Image>();
 
-            foreach (Transform child in transform.parent.Find("SwitchBar"))
+            foreach (Transform child in switch_bar.transform)
             {
                 images.Add(child.Find("Icon")?.GetComponent<Image>());
             }
 
             m_search_icons = images.ToArray();
 
-            Destroy(transform.parent.Find("SwitchBar").gameObject); // existing filters display
+            // -- Positioning
+
+            RectTransform our_transform = GetComponent<RectTransform>();
+
+            if (InventorySearchBar.Settings.EnableCategoryButtons)
+            {
+                our_transform.localScale = new Vector3(0.6f, 0.6f, 1.0f);
+                our_transform.localPosition = new Vector3(0.0f, -8.0f, 0.0f);
+
+                RectTransform their_transform = switch_bar.GetComponent<RectTransform>();
+                their_transform.localPosition = new Vector3(
+                    their_transform.localPosition.x,
+                    their_transform.localPosition.y + 23.0f,
+                    their_transform.localPosition.z);
+                their_transform.localScale = new Vector3(0.6f, 0.6f, 1.0f);
+
+                Destroy(transform.Find("Background/Decoration/TopLineImage").gameObject);
+            }
+            else
+            {
+                our_transform.localScale = new Vector3(0.85f, 0.85f, 1.0f);
+                our_transform.localPosition = new Vector3(0.0f, 2.0f, 0.0f);
+                Destroy(switch_bar);
+            }
+
             Destroy(GetComponent<CharGenFeatureSearchPCView>()); // controller from where we stole the search bar
         }
 
         private void ApplyFilter()
         {
-            InventorySearchBar.SearchContents = m_input_field.text;
-            m_active_filter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
-            InventorySearchBar.SearchContents = null;
+            if (InventorySearchBar.SearchContents == null)
+            {
+                InventorySearchBar.SearchContents = m_input_field.text;
+                m_active_filter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
+                InventorySearchBar.SearchContents = null;
+            }
         }
 
         private void OnEnable()
@@ -89,6 +134,7 @@ namespace InventorySearchBar
                     VendorPCView vendor_pc_view = GetComponentInParent(typeof(VendorPCView)) as VendorPCView;
                     m_active_filter = vendor_pc_view.ViewModel.VendorItemsFilter.CurrentFilter;
                     vendor_pc_view.ViewModel.VendorSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
+                    vendor_pc_view.ViewModel.VendorItemsFilter.CurrentFilter.Subscribe(delegate (ItemsFilter.FilterType filter) { m_dropdown.value = (int)filter; });
                     vendor_pc_view.ViewModel.VendorItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
                 }
                 else
@@ -96,7 +142,9 @@ namespace InventorySearchBar
                     InventoryStashPCView stash_pc_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
                     m_active_filter = stash_pc_view.ViewModel.ItemsFilter.CurrentFilter;
                     stash_pc_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
+                    stash_pc_view.ViewModel.ItemsFilter.CurrentFilter.Subscribe(delegate (ItemsFilter.FilterType filter) { m_dropdown.value = (int)filter; });
                     stash_pc_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+
                 }
 
                 UpdatePlaceholder();
@@ -108,7 +156,7 @@ namespace InventorySearchBar
             m_dropdown.Show();
         }
 
-        private void OnSelectDropdown(int idx)
+        private void OnSelectDropdown()
         {
             UpdatePlaceholder();
             ApplyFilter();
@@ -147,6 +195,11 @@ namespace InventorySearchBar
     {
         public void OnAreaDidLoad()
         { 
+            if (!InventorySearchBar.Enabled)
+            {
+                return;
+            }
+
             Transform prefab_transform = Game.Instance.UI.MainCanvas.transform.Find("ChargenPCView/ContentWrapper/DetailedViewZone/ChargenFeaturesDetailedPCView/FeatureSelectorPlace/FeatureSelectorView/FeatureSearchView");
 
             if (prefab_transform == null)
@@ -173,8 +226,6 @@ namespace InventorySearchBar
                     GameObject search_bar = GameObject.Instantiate(prefab_transform.gameObject);
                     search_bar.name = "CustomSearchBar";
                     search_bar.transform.SetParent(filters_block.transform, false);
-                    search_bar.GetComponent<RectTransform>().localScale = new Vector3(0.85f, 0.85f, 1.0f);
-                    search_bar.GetComponent<RectTransform>().localPosition = new Vector3(0.0f, 2.0f, 0.0f);
                     search_bar.AddComponent<SearchBoxController>();
                 }
             }
@@ -184,18 +235,57 @@ namespace InventorySearchBar
         { }
     }
 
+    public class Settings : UnityModManager.ModSettings
+    {
+        public bool EnableCategoryButtons = false;
+
+        public override void Save(UnityModManager.ModEntry modEntry)
+        {
+            Save(this, modEntry);
+        }
+    }
+
     public class InventorySearchBar
     {
         public static UnityModManager.ModEntry.ModLogger Logger;
+        public static Settings Settings;
+        public static bool Enabled;
+
         public static string SearchContents = null;
 
         public static bool Load(UnityModManager.ModEntry modEntry)
         {
             Logger = modEntry.Logger;
+            Settings = Settings.Load<Settings>(modEntry);
+
+            modEntry.OnToggle = OnToggle;
+            modEntry.OnGUI = OnGUI;
+            modEntry.OnSaveGUI = OnSaveGUI;
+
             Harmony harmony = new Harmony(modEntry.Info.Id);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
             EventBus.Subscribe(new AreaHandler());
+
             return true;
+        }
+
+        private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
+        {
+            Enabled = value;
+            return true;
+        }
+
+        private static void OnGUI(UnityModManager.ModEntry modEntry)
+        {
+            GUILayout.BeginHorizontal();
+            Settings.EnableCategoryButtons = GUILayout.Toggle(Settings.EnableCategoryButtons, " EXPERIMENTAL: Enable category toggles in addition to the search bar");
+            GUILayout.EndHorizontal();
+            GUILayout.Space(8);
+        }
+
+        private static void OnSaveGUI(UnityModManager.ModEntry modEntry)
+        {
+            Settings.Save(modEntry);
         }
     }
 

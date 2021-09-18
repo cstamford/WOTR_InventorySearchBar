@@ -2,7 +2,7 @@
 	"Id": "InventorySearchBar",
 	"DisplayName": "Inventory Search Bar",
 	"Author": "Xenofell",
-	"Version": "1.0.1",
+	"Version": "1.0.2",
 	"ManagerVersion": "0.23.3",
 	"Requirements": [],
 	"AssemblyName": "InventorySearchBar.dll",
