@@ -252,8 +252,7 @@ namespace InventorySearchBar
         public SearchOptions SearchCategories =
             SearchOptions.ItemName |
             SearchOptions.ItemType |
-            SearchOptions.ItemSubtype |
-            SearchOptions.ItemDescription;
+            SearchOptions.ItemSubtype;
 
         public override void Save(UnityModManager.ModEntry modEntry)
         {
