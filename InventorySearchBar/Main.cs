@@ -18,9 +18,23 @@ using UnityEngine.UI;
 using Kingmaker.UI.MVVM._PCView.Vendor;
 using Kingmaker.UI.MVVM._VM.Vendor;
 using Kingmaker.Blueprints.Root;
+using Kingmaker.Blueprints.Items.Equipment;
+using Kingmaker.Blueprints;
+using Kingmaker.Blueprints.Items.Components;
+using Kingmaker.Items;
+using Kingmaker.Items.Parts;
+using Kingmaker.UnitLogic;
 
 namespace InventorySearchBar
 {
+    public enum ExpandedFilterType
+    {
+        QuickslotUtilities = 8,
+        UnlearnedScrolls = 9,
+        UnlearnedRecipes = 10,
+        UnreadDocuments = 11
+    }
+
     public class SearchBoxController : MonoBehaviour
     {
         private TMP_InputField m_input_field;
@@ -57,9 +71,15 @@ namespace InventorySearchBar
             m_dropdown.ClearOptions();
 
             List<string> options = new List<string>();
+
             foreach (ItemsFilter.FilterType filter in Enum.GetValues(typeof(ItemsFilter.FilterType)))
             {
                 options.Add(LocalizedTexts.Instance.ItemsFilter.GetText(filter));
+            }
+
+            foreach (ExpandedFilterType filter in Enum.GetValues(typeof(ExpandedFilterType)))
+            {
+                options.Add(filter.ToString());
             }
 
             // For whatever reason, the localization DB has the wrong info for some of these options... I suspect someone changed the enum order
@@ -67,6 +87,11 @@ namespace InventorySearchBar
             options[(int)ItemsFilter.FilterType.Ingredients] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.NonUsable);
             options[(int)ItemsFilter.FilterType.Usable] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.Ingredients);
             options[(int)ItemsFilter.FilterType.NonUsable] = LocalizedTexts.Instance.ItemsFilter.GetText(ItemsFilter.FilterType.Usable);
+
+            options[(int)ExpandedFilterType.QuickslotUtilities] = "Quickslot utilities";
+            options[(int)ExpandedFilterType.UnlearnedScrolls] = "Unlearned scrolls";
+            options[(int)ExpandedFilterType.UnlearnedRecipes] = "Unlearned recipes";
+            options[(int)ExpandedFilterType.UnreadDocuments] = "Unread documents";
 
             m_dropdown.AddOptions(options);
 
@@ -78,6 +103,11 @@ namespace InventorySearchBar
             foreach (Transform child in switch_bar.transform)
             {
                 images.Add(child.Find("Icon")?.GetComponent<Image>());
+            }
+
+            while (images.Count < options.Count)
+            {
+                images.Add(null);
             }
 
             m_search_icons = images.ToArray();
@@ -112,12 +142,9 @@ namespace InventorySearchBar
 
         private void ApplyFilter()
         {
-            if (InventorySearchBar.SearchContents == null)
-            {
-                InventorySearchBar.SearchContents = m_input_field.text;
-                m_active_filter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
-                InventorySearchBar.SearchContents = null;
-            }
+            InventorySearchBar.SearchContents = m_input_field.text;
+            m_active_filter.SetValueAndForceNotify((ItemsFilter.FilterType)m_dropdown.value);
+            InventorySearchBar.SearchContents = null;
         }
 
         private void OnEnable()
@@ -134,20 +161,15 @@ namespace InventorySearchBar
                     VendorPCView vendor_pc_view = GetComponentInParent(typeof(VendorPCView)) as VendorPCView;
                     m_active_filter = vendor_pc_view.ViewModel.VendorItemsFilter.CurrentFilter;
                     vendor_pc_view.ViewModel.VendorSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
-                    vendor_pc_view.ViewModel.VendorItemsFilter.CurrentFilter.Subscribe(delegate (ItemsFilter.FilterType filter) { m_dropdown.value = (int)filter; });
-                    vendor_pc_view.ViewModel.VendorItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                    vendor_pc_view.ViewModel.DollVM.Unit.Subscribe(delegate (UnitDescriptor _) { ApplyFilter(); });
                 }
                 else
                 {
                     InventoryStashPCView stash_pc_view = GetComponentInParent(typeof(InventoryStashPCView)) as InventoryStashPCView;
                     m_active_filter = stash_pc_view.ViewModel.ItemsFilter.CurrentFilter;
                     stash_pc_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
-                    stash_pc_view.ViewModel.ItemsFilter.CurrentFilter.Subscribe(delegate (ItemsFilter.FilterType filter) { m_dropdown.value = (int)filter; });
                     stash_pc_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
-
                 }
-
-                UpdatePlaceholder();
             }
         }
 
@@ -326,9 +348,61 @@ namespace InventorySearchBar
         }
     }
 
-    [HarmonyPatch(typeof(ItemsFilter), nameof(ItemsFilter.ShouldShowItem), new Type[] { typeof(BlueprintItem), typeof(ItemsFilter.FilterType) })]
-    public static class ItemsFilter_ShouldShowItem
+    [HarmonyPatch(typeof(ItemsFilter), nameof(ItemsFilter.ShouldShowItem), new Type[] { typeof(ItemEntity), typeof(ItemsFilter.FilterType) })]
+    public static class ItemsFilter_ShouldShowItem_ItemEntity
     {
+        // Here, we handle filtering any expanded categories that we have.
+        [HarmonyPrefix]
+        public static bool Prefix(ItemEntity item, ItemsFilter.FilterType filter, ref bool __result)
+        {
+            ExpandedFilterType expanded_filter = (ExpandedFilterType)filter;
+
+            if (expanded_filter == ExpandedFilterType.QuickslotUtilities)
+            {
+                __result = item.Blueprint is BlueprintItemEquipmentUsable blueprint &&
+                    blueprint.Type != UsableItemType.Potion &&
+                    blueprint.Type != UsableItemType.Scroll;
+            }
+            else if (expanded_filter == ExpandedFilterType.UnlearnedScrolls)
+            {
+                CopyScroll scroll = item.Blueprint.GetComponent<CopyScroll>();
+                __result = scroll != null && scroll.CanCopy(item, UIUtility.GetCurrentCharacter());
+            }
+            else if (expanded_filter == ExpandedFilterType.UnlearnedRecipes)
+            {
+                CopyRecipe recipe = item.Blueprint.GetComponent<CopyRecipe>();
+                __result = recipe != null && recipe.CanCopy(item, UIUtility.GetCurrentCharacter());
+            }
+            else if (expanded_filter == ExpandedFilterType.UnreadDocuments)
+            {
+                ItemPartShowInfoCallback cb = item.Get<ItemPartShowInfoCallback>();
+                __result = cb != null && (!cb.m_Settings.Once || !cb.m_Triggered);
+            }
+            else
+            {
+                // Original call - proceed as normal.
+                return true;
+            }
+
+            // This call to the blueprint version will skip original in prefix then apply the search bar logic in postfix.
+            __result = __result && ItemsFilter.ShouldShowItem(item.Blueprint, filter);
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(ItemsFilter), nameof(ItemsFilter.ShouldShowItem), new Type[] { typeof(BlueprintItem), typeof(ItemsFilter.FilterType) })]
+    public static class ItemsFilter_ShouldShowItem_Blueprint
+    {
+        // Prefix: If we're filtering one of the expanded categories, we require more than the blueprint - we require the instance.
+        // If someone calls the function to check the blueprint directly, for expanded categories, we must simply allow everything.
+        [HarmonyPrefix]
+        public static bool Prefix(ItemsFilter.FilterType filter, ref bool __result)
+        {
+            __result = true;
+            return (int)filter < (int)ExpandedFilterType.QuickslotUtilities;
+        }
+
+        // Postfix: We apply the string match, if any, to the resulting matches from the original call (or our prefix).
         [HarmonyPostfix]
         public static void Postfix(BlueprintItem blueprintItem, ref bool __result)
         { 
