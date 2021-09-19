@@ -235,9 +235,25 @@ namespace InventorySearchBar
         { }
     }
 
+    [Flags]
+    public enum SearchOptions
+    {
+        None                    = 0,
+        ItemName                = 1 << 0,
+        ItemType                = 1 << 1,
+        ItemSubtype             = 1 << 2,
+        ItemDescription         = 1 << 3,
+    }
+
     public class Settings : UnityModManager.ModSettings
     {
         public bool EnableCategoryButtons = false;
+
+        public SearchOptions SearchCategories =
+            SearchOptions.ItemName |
+            SearchOptions.ItemType |
+            SearchOptions.ItemSubtype |
+            SearchOptions.ItemDescription;
 
         public override void Save(UnityModManager.ModEntry modEntry)
         {
@@ -280,7 +296,29 @@ namespace InventorySearchBar
             GUILayout.BeginHorizontal();
             Settings.EnableCategoryButtons = GUILayout.Toggle(Settings.EnableCategoryButtons, " EXPERIMENTAL: Enable category toggles in addition to the search bar");
             GUILayout.EndHorizontal();
-            GUILayout.Space(8);
+            GUILayout.Space(4);
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Search categories");
+            GUILayout.EndHorizontal();
+
+            SearchOptions new_options = SearchOptions.None;
+
+            foreach (SearchOptions flag in Enum.GetValues(typeof(SearchOptions)))
+            {
+                if (flag == SearchOptions.None) continue;
+
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Toggle(Settings.SearchCategories.HasFlag(flag), $" {flag}"))
+                {
+                    new_options |= flag;
+                }
+                GUILayout.EndHorizontal();
+            }
+
+            Settings.SearchCategories = new_options;
+
+            GUILayout.Space(4);
         }
 
         private static void OnSaveGUI(UnityModManager.ModEntry modEntry)
@@ -295,11 +333,29 @@ namespace InventorySearchBar
         [HarmonyPostfix]
         public static void Postfix(BlueprintItem blueprintItem, ref bool __result)
         { 
-            if (!string.IsNullOrWhiteSpace(InventorySearchBar.SearchContents))
+            if (__result && !string.IsNullOrWhiteSpace(InventorySearchBar.SearchContents))
             {
-                __result = __result && (
-                    blueprintItem.Name.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0 || // name match
-                    blueprintItem.SubtypeName.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0); // type match
+                __result = false;
+
+                if (InventorySearchBar.Settings.SearchCategories.HasFlag(SearchOptions.ItemName))
+                {
+                    __result |= blueprintItem.Name.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+
+                if (InventorySearchBar.Settings.SearchCategories.HasFlag(SearchOptions.ItemType))
+                {
+                    __result |= blueprintItem.ItemType.ToString().IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+
+                if (InventorySearchBar.Settings.SearchCategories.HasFlag(SearchOptions.ItemSubtype))
+                {
+                    __result |= blueprintItem.SubtypeName.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+
+                if (InventorySearchBar.Settings.SearchCategories.HasFlag(SearchOptions.ItemDescription))
+                {
+                    __result |= blueprintItem.Description.IndexOf(InventorySearchBar.SearchContents, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
             }
         }
     }
