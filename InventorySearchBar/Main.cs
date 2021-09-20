@@ -24,6 +24,7 @@ using Kingmaker.Blueprints.Items.Components;
 using Kingmaker.Items;
 using Kingmaker.Items.Parts;
 using Kingmaker.UnitLogic;
+using Kingmaker.UI;
 
 namespace InventorySearchBar
 {
@@ -128,7 +129,9 @@ namespace InventorySearchBar
                     their_transform.localPosition.z);
                 their_transform.localScale = new Vector3(0.6f, 0.6f, 1.0f);
 
+                // destroy the top and bottom gfx as they cause a lot of noise
                 Destroy(transform.Find("Background/Decoration/TopLineImage").gameObject);
+                Destroy(transform.Find("Background/Decoration/BottomLineImage").gameObject);
             }
             else
             {
@@ -169,6 +172,18 @@ namespace InventorySearchBar
                     m_active_filter = stash_pc_view.ViewModel.ItemsFilter.CurrentFilter;
                     stash_pc_view.ViewModel.ItemSlotsGroup.CollectionChangedCommand.Subscribe(delegate (bool _) { ApplyFilter(); });
                     stash_pc_view.ViewModel.ItemsFilter.CurrentSorter.Subscribe(delegate (ItemsFilter.SorterType _) { ApplyFilter(); });
+                }
+
+                Transform switch_bar = transform.parent.Find("SwitchBar");
+
+                if (switch_bar != null)
+                {
+                    // Add listeners to each button; if the button changes, we change the dropdown to match.
+                    foreach (ItemsFilter.FilterType filter in Enum.GetValues(typeof(ItemsFilter.FilterType)))
+                    {
+                        ToggleWorkaround toggle = switch_bar.transform.GetChild((int)filter).GetComponent<ToggleWorkaround>();
+                        toggle.onValueChanged.AddListener(delegate (bool on) { if (on) m_dropdown.value = (int)filter; });
+                    }
                 }
             }
         }
