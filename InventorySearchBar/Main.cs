@@ -345,6 +345,11 @@ namespace InventorySearchBar
             GUILayout.Space(4);
 
             GUILayout.BeginHorizontal();
+            Settings.ResetFilterUponOpeningInventory = GUILayout.Toggle(Settings.ResetFilterUponOpeningInventory, " Reset the chosen filter when opening the inventory.");
+            GUILayout.EndHorizontal();
+            GUILayout.Space(4);
+
+            GUILayout.BeginHorizontal();
             GUILayout.Label("Search categories");
             GUILayout.EndHorizontal();
 
