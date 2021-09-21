@@ -21,10 +21,10 @@ using Kingmaker.Blueprints.Root;
 using Kingmaker.Blueprints.Items.Equipment;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Items.Components;
-using Kingmaker.Items;
 using Kingmaker.Items.Parts;
 using Kingmaker.UnitLogic;
 using Kingmaker.UI;
+using Kingmaker.Items;
 
 namespace InventorySearchBar
 {
@@ -159,6 +159,11 @@ namespace InventorySearchBar
         {
             if (m_active_filter == null)
             {
+                if (InventorySearchBar.Settings.ResetFilterUponOpeningInventory)
+                {
+                    m_dropdown.value = (int)ItemsFilter.FilterType.NoFilter;
+                }
+
                 if (transform.parent.parent.parent.name == "VendorBlock")
                 {
                     VendorPCView vendor_pc_view = GetComponentInParent(typeof(VendorPCView)) as VendorPCView;
@@ -217,7 +222,11 @@ namespace InventorySearchBar
         {
             m_input_field.gameObject.SetActive(false);
             m_input_button.gameObject.SetActive(true);
-            EventSystem.current.SetSelectedGameObject(null); // return focus to regular UI
+
+            if (!EventSystem.current.alreadySelecting) // could be, in same click, ending edit and starting dropdown
+            {
+                EventSystem.current.SetSelectedGameObject(gameObject); // return focus to regular UI
+            }
         }
 
         private void UpdatePlaceholder()
@@ -231,7 +240,7 @@ namespace InventorySearchBar
     public class AreaHandler : IAreaHandler
     {
         public void OnAreaDidLoad()
-        { 
+        {
             if (!InventorySearchBar.Enabled)
             {
                 return;
@@ -285,6 +294,7 @@ namespace InventorySearchBar
     public class Settings : UnityModManager.ModSettings
     {
         public bool EnableCategoryButtons = false;
+        public bool ResetFilterUponOpeningInventory = false;
 
         public SearchOptions SearchCategories =
             SearchOptions.ItemName |
